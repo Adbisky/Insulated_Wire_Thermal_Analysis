@@ -1,0 +1,2 @@
+# Insulated_Wire_Thermal_Analysis
+Interactive insulated wire thermal analysis visualizer
