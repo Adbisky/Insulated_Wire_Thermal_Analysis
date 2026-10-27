@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thermal Insulation Visualizer with Surface Contact Conductance</title>
+    <!-- KaTeX for Math Rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --inner-primary: #d35400; 
+            --inner-secondary: #e67e22; 
+            --outer-primary: #2980b9; 
+            --outer-secondary: #3498db; 
+            --text: #1e293b;
+            /* High-contrast, colorblind-friendly chart palette */
+            --chart-blue: #0072B2;
+            --chart-orange: #E69F00;
+            --chart-green: #009E73;
+            --chart-red: #D55E00;
+            --chart-purple: #7A3E9D;
+            --chart-cyan: #56B4E9;
+            --chart-gray: #4B5563;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            margin: 0;
+            padding: 10px;
+            font-size: 0.8rem;
+        }
+
+        .container {
+            max-width: 1440px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 10px;
+        }
+
+        .col-12 { grid-column: span 12; }
+        .col-9 { grid-column: span 9; }
+        .col-6 { grid-column: span 6; }
+        .col-4 { grid-column: span 4; }
+        .col-3 { grid-column: span 3; }
+
+        @media (max-width: 1024px) {
+            .col-3, .col-4 { grid-column: span 6; }
+            .col-9 { grid-column: span 12; }
+        }
+        @media (max-width: 768px) {
+            .col-3, .col-4, .col-6, .col-9 { grid-column: span 12; }
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 10px 12px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+            border: 1px solid #e2e8f0;
+        }
+
+        h2 {
+            margin: 0 0 6px 0;
+            font-size: 0.88rem;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 4px;
+            color: #0f172a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 6px 10px;
+        }
+
+        .control-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .control-item label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            margin-bottom: 2px;
+            color: #475569;
+        }
+
+        .control-item input {
+            width: 100%;
+            padding: 2px 4px;
+            font-size: 0.75rem;
+            border-radius: 4px;
+            border: 1px solid #cbd5e1;
+            box-sizing: border-box;
+        }
+
+        .mode-switch-wrap { display:flex; justify-content:center; align-items:center; gap:8px; margin-top:8px; }
+        .mode-switch { position:relative; display:inline-block; width:58px; height:28px; }
+        .mode-switch input { opacity:0; width:0; height:0; }
+        .mode-slider { position:absolute; inset:0; cursor:pointer; background:#64748b; border-radius:999px; transition:.2s; }
+        .mode-slider:before { content:""; position:absolute; width:22px; height:22px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s; box-shadow:0 1px 3px rgba(0,0,0,.25); }
+        .mode-switch input:checked + .mode-slider { background:#0072B2; }
+        .mode-switch input:checked + .mode-slider:before { transform:translateX(30px); }
+        .mode-label { font-weight:800; color:#334155; min-width:22px; text-align:center; }
+        .mode-label.active { color:#0072B2; }
+        .feedback-toggle-row { display:flex; align-items:center; gap:8px; min-height:28px; }
+        .feedback-toggle-row .mode-switch { flex:0 0 auto; }
+        .feedback-state { font-size:0.72rem; font-weight:800; color:#64748b; }
+        .feedback-state.active { color:#0072B2; }
+        .canvas-container, .chart-container {
+            position: relative;
+            height: 190px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas#crossSectionCanvas {
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background-color: #f1f5f9;
+        }
+
+        .eq-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 12px;
+            padding: 6px 10px;
+            align-items: center;
+            border-bottom: 1px solid #e2e8f0;
+            overflow-x: auto;
+        }
+
+        .eq-row:last-child {
+            border-bottom: none;
+        }
+
+        .eq-row:nth-child(odd) {
+            background-color: #ffffff;
+        }
+
+        .eq-row:nth-child(even) {
+            background-color: #f1f5f9;
+        }
+
+        .eq-row.eq-header-row {
+            background-color: #e2e8f0;
+            font-weight: bold;
+        }
+
+        .eq-row > div:nth-child(1), .eq-row > div:nth-child(2) {
+            border-right: 1px dashed #cbd5e1;
+            padding-right: 8px;
+        }
+
+        .source-derivation-card,
+        .tx-derivation-card {
+            border-top: 3px solid #facc15;
+        }
+        /* Highlighted contact-condition equations in the T(x) derivation */
+        .tx-derivation-card .eq-row.tx-contact-row {
+            background-color: #e0f2fe;
+            border-left: 4px solid #0284c7;
+        }
+        .tx-derivation-card .eq-row.tx-contact-row:nth-child(odd),
+        .tx-derivation-card .eq-row.tx-contact-row:nth-child(even) {
+            background-color: #e0f2fe;
+        }
+        .tx-derivation-card .eq-row.tx-contact-row > div {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            text-align: right;
+            min-height: 28px;
+        }
+        .tx-derivation-card .eq-row.tx-contact-row .katex-display {
+            width: 100%;
+            margin: 0;
+            text-align: right;
+        }
+        .derivation-description {
+            margin: 0 0 8px 0;
+            padding: 7px 10px;
+            color: #334155;
+            background: #fffbeb;
+            border-left: 3px solid #facc15;
+            border-radius: 0 4px 4px 0;
+            line-height: 1.4;
+        }
+        .btn-action {
+            background: #475569;
+            color: #fff;
+            border: none;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            cursor: pointer;
+        }
+        .btn-action:hover { background: #334155; }
+
+
+        /* Desktop: right rail ordered as cross-section, sliders, history charts. */
+        .right-rail { display: contents; }
+        .right-rail > .card { min-width: 0; }
+        @media (min-width: 1025px) {
+            .container {
+                max-width: 1800px;
+                grid-template-columns: repeat(12, minmax(0, 1fr));
+                align-items: start;
+            }
+            .right-rail {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                grid-column: 10 / span 3;
+                grid-row: 1 / span 99;
+                position: sticky;
+                top: 10px;
+                max-height: calc(100vh - 20px);
+                overflow-y: auto;
+                z-index: 5;
+                padding-right: 2px;
+            }
+            .right-rail .controls-grid { grid-template-columns: 1fr; gap: 10px; }
+            .right-rail .control-item label { font-size: 0.76rem; margin-bottom: 4px; }
+            .right-rail .control-item input[type="range"] { width: 100%; }
+            .right-rail .canvas-container { height: 190px; }
+            .right-rail .chart-container { height: 210px; }
+            .right-rail canvas#crossSectionCanvas { width: 100%; max-width: 280px; height: 180px; }
+            .container > .col-12 { grid-column: 1 / span 9; }
+        }
+        @media (max-width: 1024px) {
+            .right-rail {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                grid-column: span 12;
+                position: static;
+                max-height: none;
+                overflow: visible;
+            }
+            .right-rail .controls-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+        }
+
+        /* Application title */
+        .app-header {
+            max-width: 1800px;
+            margin: 0 auto 14px;
+            padding: 18px 22px 20px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #0b2438 0%, #123a55 100%);
+            border: 1px solid rgba(56, 189, 248, 0.24);
+            box-shadow: 0 6px 18px rgba(15, 48, 69, 0.16);
+        }
+        .app-header__eyebrow {
+            margin: 0 0 5px;
+            color: #35d4f4;
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.18em;
+            line-height: 1.2;
+        }
+        .app-header__title {
+            margin: 0;
+            color: #ffffff;
+            font-size: clamp(1.65rem, 3vw, 2.45rem);
+            font-weight: 800;
+            line-height: 1.12;
+            letter-spacing: -0.035em;
+        }
+        @media (max-width: 768px) {
+            .app-header {
+                margin-bottom: 10px;
+                padding: 15px 16px 17px;
+            }
+            .app-header__title {
+                font-size: clamp(1.45rem, 7vw, 2rem);
+            }
+        }
+    </style>
+</head>
+<body>
+<header class="app-header" aria-labelledby="app-title">
+    <div class="app-header__eyebrow">THERMAL ANALYSIS</div>
+    <h1 class="app-header__title" id="app-title">Wire &amp; Insulation Thermal Model</h1>
+</header>
+
+<div class="container">
+    <!-- Right rail: cross-section, controls, history -->
+    <aside class="right-rail">
+<!-- 3. 2D Cross Section -->
+    <div class="card cross-section-card">
+        <h2>2D Cross-Section</h2>
+        <div class="canvas-container">
+            <canvas id="crossSectionCanvas" width="280" height="180"></canvas>
+        </div>
+        <div class="mode-switch-wrap" aria-label="Current type selector">
+            <span id="dcModeLabel" class="mode-label active">DC</span>
+            <label class="mode-switch">
+                <input type="checkbox" id="modeSwitch" aria-label="Switch between DC and single-phase AC">
+                <span class="mode-slider"></span>
+            </label>
+            <span id="acModeLabel" class="mode-label">AC</span>
+        </div>
+    </div>
+
+    <!-- Controls Panel -->
+    <div class="card controls-panel">
+        <h2>System Parameters</h2>
+        <div class="controls-grid">
+            <div class="control-item">
+                <label for="iDcInput">Peak current I_peak (A): <span id="iDcVal">150.0</span></label>
+                <input type="number" id="iDcInput" min="0.0" max="500.0" step="1.0" value="150.0">
+            </div>
+            <div class="control-item" id="frequencyControl" style="display:none;">
+                <label for="frequencyInput">AC frequency f (Hz): <span id="frequencyVal">50.0</span></label>
+                <input type="number" id="frequencyInput" min="1" max="10000" step="1" value="50">
+            </div>
+            <div class="control-item">
+                <label for="tAmb">Ambient T_amb (°C): <span id="tAmbVal">25.0</span></label>
+                <input type="number" id="tAmb" min="-40.0" max="300.0" step="1.0" value="20.0">
+            </div>
+            <div class="control-item">
+                <label for="iterationInput">Electrothermal iterations: <span id="iterationVal">25</span></label>
+                <input type="number" id="iterationInput" min="1" max="500" step="1" value="25">
+            </div>
+            <div class="control-item">
+                <label for="temperatureFeedbackSwitch">Temperature-dependent resistivity:</label>
+                <div class="feedback-toggle-row">
+                    <label class="mode-switch">
+                        <input type="checkbox" id="temperatureFeedbackSwitch" checked aria-label="Enable temperature-dependent copper resistivity">
+                        <span class="mode-slider"></span>
+                    </label>
+                    <span id="temperatureFeedbackState" class="feedback-state active">ON</span>
+                </div>
+            </div>
+            <div class="control-item">
+                <label for="rInt">Radius r_IN (mm): <span id="rIntVal">2.0</span></label>
+                <input type="number" id="rInt" min="0.5" max="10.0" step="0.1" value="5.0">
+            </div>
+            <div class="control-item">
+                <label for="rExt">Radius r_OUT (mm): <span id="rExtVal">3.5</span></label>
+                <input type="number" id="rExt" min="1.0" max="40.0" step="0.1" value="10.0">
+            </div>
+            <div class="control-item">
+                <label for="hcCoeff">Contact Cond. h_c (W/m²·K): <span id="hcCoeffVal">2000</span></label>
+                <input type="number" id="hcCoeff" min="10" max="2000" step="10" value="2000">
+            </div>
+            <div class="control-item">
+                <label for="lambda">Thermal Cond. λ (W/m·K): <span id="lambdaVal">0.35</span></label>
+                <input type="number" id="lambda" min="0.05" max="1.0" step="0.01" value="0.35">
+            </div>
+            <div class="control-item">
+                <label for="hCoeff">Convective h (W/m²·K): <span id="hCoeffVal">10.0</span></label>
+                <input type="number" id="hCoeff" min="2.0" max="200.0" step="0.1" value="10.0">
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. Historical Temperatures Chart -->
+    <div class="card history-card">
+        <h2>Historical Temperatures</h2>
+        <div class="chart-container">
+            <canvas id="tempHistoryChart"></canvas>
+        </div>
+    </div>
+    </aside>
+    <!-- 1. Radial Temperature Profile Chart -->
+    <div class="card col-12">
+        <h2>Temperature Profile T(r)</h2>
+        <div class="chart-container" style="height: 220px;">
+            <canvas id="profileChart"></canvas>
+        </div>
+    </div>
+
+    <!-- 2. Mathematical Derivation Section with 3 Columns -->
+    <div class="card col-12 source-derivation-card">
+        <h2>Fundamental Physical Laws &amp; Thermal Resistances Derivation</h2>
+        <div class="derivation-description">
+            Derivation of the heat-source temperature based on Joule heating, the thermal contact condition,
+            conduction through the insulation, convection to the ambient, and the total thermal resistance balance.
+            The middle column shows the equivalent cylindrical-geometry formulation for the wire and insulation,
+            while the right column shows the calculated values.
+        </div>
+        <div class="math-container" style="display: flex; flex-direction: column; text-align: left; border-radius: 6px; border: 1px solid #e2e8f0; overflow: hidden;">
+            <div class="eq-rows-container">
+                <div class="eq-row eq-header-row">
+                    <div id="flatHeader"></div>
+                    <div id="cylHeader"></div>
+                    <div id="calcHeader"></div>
+                </div>
+                <!-- 1. Q = deltaT / R -->
+                <div class="eq-row">
+                    <div id="eqF_1"></div>
+                    <div id="eqC_1"></div>
+                    <div id="eqV_1"></div>
+                </div>
+                <!-- 2. Q = (T - T) / (R+R+R) -->
+                <div class="eq-row">
+                    <div id="eqF_2"></div>
+                    <div id="eqC_2"></div>
+                    <div id="eqV_2"></div>
+                </div>
+                <!-- 3. R_contact -->
+                <div class="eq-row">
+                    <div id="eqF_3"></div>
+                    <div id="eqC_3"></div>
+                    <div id="eqV_3"></div>
+                </div>
+                <!-- 4. R_cond -->
+                <div class="eq-row">
+                    <div id="eqF_4"></div>
+                    <div id="eqC_4"></div>
+                    <div id="eqV_4"></div>
+                </div>
+                <!-- 5. R_conv -->
+                <div class="eq-row">
+                    <div id="eqF_5"></div>
+                    <div id="eqC_5"></div>
+                    <div id="eqV_5"></div>
+                </div>
+                <!-- 2b. Q Substituted -->
+                <div class="eq-row" style="background-color: #e0f2fe;">
+                    <div id="eqF_2b"></div>
+                    <div id="eqC_2b"></div>
+                    <div id="eqV_2b"></div>
+                </div>
+
+                <!-- Universal Q for a flat wall; Joule heating Q for the cylindrical wire -->
+                <div class="eq-row">
+                    <div id="eqF_12c"></div>
+                    <div id="eqC_12c"></div>
+                    <div id="eqV_12c"></div>
+                </div>
+                <!-- 2c. T0 Transformed (7th equation) -->
+                <div class="eq-row" style="background-color: #fef08a;">
+                    <div id="eqF_2c"></div>
+                    <div id="eqC_2c"></div>
+                    <div id="eqV_2c"></div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Separate derivation: insulation internal temperature T(x) -->
+    <div class="card col-12 tx-derivation-card">
+        <h2>Derivation of the Temperature Equation Inside the Insulation T(x)</h2>
+        <div class="derivation-description">
+            Derivation of the temperature profile inside the insulation based on Fourier’s law,
+            the thermal contact condition, and the thermal resistance balance. The middle column shows
+            the equivalent cylindrical-geometry formulation T(r), while the right column shows the calculated values.
+        </div>
+        <div class="math-container" style="display: flex; flex-direction: column; text-align: left; border-radius: 6px; border: 1px solid #e2e8f0; overflow: hidden;">
+            <div class="eq-row eq-header-row">
+                <div id="txFlatHeader"></div>
+                <div id="txCylHeader"></div>
+                <div id="txCalcHeader"></div>
+            </div>
+                <!-- 6. Fourier's Law (Heat Flux) -->
+                <div class="eq-row">
+                    <div id="eqF_6"></div>
+                    <div id="eqC_6"></div>
+                    <div id="eqV_6"></div>
+                </div>
+                <!-- 7. Fourier's Law (Total Rate) -->
+                <div class="eq-row">
+                    <div id="eqF_7"></div>
+                    <div id="eqC_7"></div>
+                    <div id="eqV_7"></div>
+                </div>
+                <!-- 8. Separate Variables -->
+                <div class="eq-row">
+                    <div id="eqF_8"></div>
+                    <div id="eqC_8"></div>
+                    <div id="eqV_8"></div>
+                </div>
+                <!-- 9. Integration -->
+                <div class="eq-row">
+                    <div id="eqF_9"></div>
+                    <div id="eqC_9"></div>
+                    <div id="eqV_9"></div>
+                </div>
+                <!-- 10. Final Difference -->
+                <div class="eq-row">
+                    <div id="eqF_10"></div>
+                    <div id="eqC_10"></div>
+                    <div id="eqV_10"></div>
+                </div>
+                <!-- 11. Function T(x) and T(r) (variables on the left) -->
+                <div class="eq-row">
+                    <div id="eqF_11"></div>
+                    <div id="eqC_11"></div>
+                    <div id="eqV_11"></div>
+                </div>
+                <!-- 12. Main definition of contact heat transfer (Newton's law of cooling) -->
+                <div class="eq-row tx-contact-row">
+                    <div id="eqF_12"></div>
+                    <div id="eqC_12"></div>
+                    <div id="eqV_12"></div>
+                </div>
+                <!-- 12b. Transformed equation with T0 / T_wire on the left -->
+                <div class="eq-row tx-contact-row">
+                    <div id="eqF_12b"></div>
+                    <div id="eqC_12b"></div>
+                    <div id="eqV_12b"></div>
+                </div>
+                <!-- 13. Derivation of T_surf and T_IN -->
+                <div class="eq-row tx-contact-row">
+                    <div id="eqF_13"></div>
+                    <div id="eqC_13"></div>
+                    <div id="eqV_13"></div>
+                </div>
+                <!-- 13b. Direct substitution of T_surf into T(x), ordinary row -->
+                <div class="eq-row">
+                    <div id="eqF_13b"></div>
+                    <div id="eqC_13b"></div>
+                    <div id="eqV_13b"></div>
+                </div>
+                <!-- 14. Substitution of T0 / Twire into T(x) / T(r) -->
+                <div class="eq-row">
+                    <div id="eqF_14"></div>
+                    <div id="eqC_14"></div>
+                    <div id="eqV_14"></div>
+                </div>
+                <!-- 15. Distribute Q -->
+                <div class="eq-row">
+                    <div id="eqF_15"></div>
+                    <div id="eqC_15"></div>
+                    <div id="eqV_15"></div>
+                </div>
+                <!-- 16. Simplify (Cancellation) -->
+                <div class="eq-row">
+                    <div id="eqF_16"></div>
+                    <div id="eqC_16"></div>
+                    <div id="eqV_16"></div>
+                </div>
+                <!-- 17. Compact thermal-resistance form -->
+                <div class="eq-row">
+                    <div id="eqF_17"></div>
+                    <div id="eqC_17"></div>
+                    <div id="eqV_17"></div>
+                </div>
+                <!-- 18. T_OUT obtained directly from T(x) / T(r), without resistance abbreviations -->
+                <div class="eq-row">
+                    <div id="eqF_18"></div>
+                    <div id="eqC_18"></div>
+                    <div id="eqV_18"></div>
+                </div>
+        </div>
+    </div>
+
+    
+</div>
+
+<script>
+    let profileChart = null;
+    let tempHistoryChart = null;
+
+    let stepCount = 0;
+    const maxHistoryPoints = 25;
+    const historyStore = {
+        labels: [],
+
+        tExtHistory: [],
+        tWireHistory: [],
+        tIntHistory: []
+    };
+
+    const inputs = {
+        iDcInput: document.getElementById('iDcInput'),
+        frequencyInput: document.getElementById('frequencyInput'),
+        tAmb: document.getElementById('tAmb'),
+        iterationInput: document.getElementById('iterationInput'),
+        rInt: document.getElementById('rInt'),
+        rExt: document.getElementById('rExt'),
+        hcCoeff: document.getElementById('hcCoeff'),
+        lambda: document.getElementById('lambda'),
+        hCoeff: document.getElementById('hCoeff')
+    };
+
+    const displays = {
+        iDcVal: document.getElementById('iDcVal'),
+        frequencyVal: document.getElementById('frequencyVal'),
+        tAmbVal: document.getElementById('tAmbVal'),
+        iterationVal: document.getElementById('iterationVal'),
+        rIntVal: document.getElementById('rIntVal'),
+        rExtVal: document.getElementById('rExtVal'),
+        hcCoeffVal: document.getElementById('hcCoeffVal'),
+        lambdaVal: document.getElementById('lambdaVal'),
+        hCoeffVal: document.getElementById('hCoeffVal')
+    };
+
+    const csCanvas = document.getElementById('crossSectionCanvas');
+    const csCtx = csCanvas.getContext('2d');
+
+    const profileAnnotationsPlugin = {
+        id: 'profileAnnotations',
+        afterDraw: (chart) => {
+            if (!chart.config.options.plugins.profileAnnotations) return;
+            const { rInt, rExt, tWire, tInt, tExt } = chart.config.options.plugins.profileAnnotations;
+            
+            const ctx = chart.ctx;
+            const xAxis = chart.scales.x;
+            const yAxis = chart.scales.y;
+
+            const x0_pos = xAxis.getPixelForValue(0);
+            const xInt_pos = xAxis.getPixelForValue(rInt);
+            const xExt_pos = xAxis.getPixelForValue(rExt);
+
+            const yWire_pos = yAxis.getPixelForValue(tWire);
+            const yInt_pos = yAxis.getPixelForValue(tInt);
+            const yExt_pos = yAxis.getPixelForValue(tExt);
+
+            ctx.save();
+            ctx.lineWidth = 1.2;
+            ctx.setLineDash([4, 4]);
+            ctx.font = 'bold 10px sans-serif';
+
+            // Vertical r_IN Line
+            ctx.beginPath();
+            ctx.strokeStyle = '#D55E00';
+            ctx.moveTo(xInt_pos, yAxis.top);
+            ctx.lineTo(xInt_pos, yAxis.bottom);
+            ctx.stroke();
+            ctx.fillStyle = '#D55E00';
+            ctx.textBaseline = 'top';
+            ctx.fillText('r_IN', xInt_pos + 4, 0);
+
+            // Vertical r_OUT Line
+            ctx.beginPath();
+            ctx.strokeStyle = '#0072B2';
+            ctx.moveTo(xExt_pos, yAxis.top);
+            ctx.lineTo(xExt_pos, yAxis.bottom);
+            ctx.stroke();
+            ctx.fillStyle = '#0072B2';
+            ctx.fillText('r_OUT', xExt_pos + 4, 0);
+
+            // T_wire Annotation & Reference Line
+            // Match Historical Temperatures: T_wire = orange-red (#D55E00).
+            if (yWire_pos >= yAxis.top && yWire_pos <= yAxis.bottom) {
+                ctx.beginPath();
+                ctx.strokeStyle = 'rgba(213, 94, 0, 0.85)';
+                ctx.moveTo(x0_pos, yWire_pos);
+                ctx.lineTo(xInt_pos, yWire_pos);
+                ctx.stroke();
+                ctx.fillStyle = '#D55E00';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText('T_wire', x0_pos + 6, yWire_pos - 2);
+            }
+
+            // T_IN Annotation & Reference Line
+            // Match Historical Temperatures: T_IN = green (#009E73).
+            if (yInt_pos >= yAxis.top && yInt_pos <= yAxis.bottom) {
+                ctx.beginPath();
+                ctx.strokeStyle = 'rgba(0, 158, 115, 0.85)';
+                ctx.moveTo(x0_pos, yInt_pos);
+                ctx.lineTo(xInt_pos, yInt_pos);
+                ctx.stroke();
+                ctx.fillStyle = '#009E73';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText('T_IN', xInt_pos + 6, yInt_pos - 4);
+            }
+
+            // T_OUT Annotation & Reference Line
+            // Match Historical Temperatures: T_OUT = blue (#0072B2).
+            if (yExt_pos >= yAxis.top && yExt_pos <= yAxis.bottom) {
+                ctx.beginPath();
+                ctx.strokeStyle = 'rgba(0, 114, 178, 0.85)';
+                ctx.moveTo(x0_pos, yExt_pos);
+                ctx.lineTo(xExt_pos, yExt_pos); 
+                ctx.stroke();
+                ctx.fillStyle = '#0072B2';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText('T_OUT', xExt_pos + 4, yExt_pos - 2);
+            }
+            // Thermal-resistance regions on the horizontal axis.
+            // R_contact is localized at r_IN, R_cond spans r_IN..r_OUT,
+            // and R_conv starts at r_OUT and continues toward the ambient region.
+            const resistanceY = yAxis.bottom - 10;
+            const resistanceTextY = yAxis.bottom - 14;
+            const xConvEnd = xAxis.right;
+
+            function drawResistanceBracket(xStart, xEnd, label, color) {
+                const minWidth = 28;
+                let a = xStart;
+                let b = xEnd;
+                if (Math.abs(b - a) < minWidth) {
+                    const mid = (a + b) / 2;
+                    a = mid - minWidth / 2;
+                    b = mid + minWidth / 2;
+                }
+                a = Math.max(xAxis.left, a);
+                b = Math.min(xAxis.right, b);
+                ctx.save();
+                ctx.setLineDash([]);
+                ctx.strokeStyle = color;
+                ctx.fillStyle = color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(a, resistanceY - 4);
+                ctx.lineTo(a, resistanceY + 4);
+                ctx.moveTo(a, resistanceY);
+                ctx.lineTo(b, resistanceY);
+                ctx.moveTo(b, resistanceY - 4);
+                ctx.lineTo(b, resistanceY + 4);
+                ctx.stroke();
+                ctx.font = 'bold 10px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(label, (a + b) / 2, resistanceTextY);
+                ctx.restore();
+            }
+
+            // Contact resistance is a temperature jump at r_IN.
+            // Its bracket ends exactly at r_IN, so it does not overlap Rcond.
+            drawResistanceBracket(xInt_pos - 32, xInt_pos, 'Rcont', '#D55E00');
+            drawResistanceBracket(xInt_pos, xExt_pos, 'Rcond', '#009E73');
+            drawResistanceBracket(xExt_pos, xConvEnd, 'Rconv', '#0072B2');
+
+            // Dynamic T(r) Profile Curve Label  
+            const xMid = (xInt_pos + xExt_pos) / 2;
+            const yMid = (yInt_pos + yExt_pos) / 2;
+            ctx.fillStyle = '#000000';
+            ctx.font = 'bold italic 11px sans-serif';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText('T(r)', xMid + 6, yMid - 4);
+
+            ctx.restore();
+        }
+    };
+
+    function resetHistory() {
+        stepCount = 0;
+        historyStore.labels = [];
+        historyStore.tExtHistory = [];
+        historyStore.tWireHistory = [];
+        historyStore.tIntHistory = [];
+        if (tempHistoryChart) {
+            tempHistoryChart.data.labels = [];
+            tempHistoryChart.data.datasets.forEach(dataset => { dataset.data = []; });
+            tempHistoryChart.update();
+        }
+    }
+
+    function initCharts() {
+        const ctxT = document.getElementById('profileChart').getContext('2d');
+        profileChart = new Chart(ctxT, {
+            type: 'line',
+            data: {
+                datasets: [
+                {
+                    label: 'T(r) [°C]',
+                    data: [],
+                    borderColor: '#D32F2F',
+                    backgroundColor: 'rgba(211, 47, 47, 0.12)',
+                    borderWidth: 2,
+                    fill: true,
+                    pointRadius: 0
+                },
+                {
+                    label: 'Contact temperature jump',
+                    data: [],
+                    borderColor: '#D55E00',
+                    backgroundColor: '#D55E00',
+                    borderWidth: 2,
+                    fill: false,
+                    pointRadius: 0
+                },
+                {
+                    label: 'Ambient temperature',
+                    data: [],
+                    borderColor: '#4B5563',
+                    backgroundColor: '#4B5563',
+                    borderWidth: 1,
+                    borderDash: [5, 4],
+                    fill: false,
+                    pointRadius: 0
+                }
+            ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { bottom: 18 } },
+                plugins: { 
+                    legend: { display: false },
+                    profileAnnotations: { rInt: 0, rExt: 0, tWire: 0, tInt: 0, tExt: 0 }
+                },
+                scales: {
+                    x: { 
+                        type: 'linear', 
+                        ticks: { font: { size: 9 } }, 
+                        title: { display: true, text: 'r (mm)', font: { size: 9, weight: 'bold' } } 
+                    },
+                    y: { 
+                        ticks: { font: { size: 9 } }, 
+                        title: { display: true, text: 'T(r) (°C)', font: { size: 9, weight: 'bold' } } 
+                    }
+                }
+            },
+            plugins: [profileAnnotationsPlugin]
+        });
+        const ctxTh = document.getElementById('tempHistoryChart').getContext('2d');
+        tempHistoryChart = new Chart(ctxTh, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+					{ label: 'T_wire', data: [], borderColor: '#D55E00', backgroundColor: '#D55E00', pointBackgroundColor: '#D55E00', pointBorderColor: '#D55E00', borderWidth: 2.5, tension: 0.2, pointRadius: 3, pointHoverRadius: 6, pointStyle: 'triangle' },
+					{ label: 'T_IN', data: [], borderColor: '#009E73', backgroundColor: '#009E73', pointBackgroundColor: '#009E73', pointBorderColor: '#009E73', borderWidth: 2.5, borderDash: [6, 3], tension: 0.2, pointRadius: 3, pointHoverRadius: 6, pointStyle: 'rect' },
+                    { label: 'T_OUT', data: [], borderColor: '#0072B2', backgroundColor: '#0072B2', pointBackgroundColor: '#0072B2', pointBorderColor: '#0072B2', borderWidth: 2.5, tension: 0.2, pointRadius: 3, pointHoverRadius: 6, pointStyle: 'circle' }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { boxWidth: 10, boxHeight: 10, font: { size: 8 }, usePointStyle: true, pointStyleWidth: 14 } },
+                    tooltip: {
+                        callbacks: {
+                            label: context => context.dataset.label + ': ' + Number(context.parsed.y).toFixed(2) + ' °C'
+                        }
+                    }
+                },
+                scales: {
+                    x: { ticks: { font: { size: 8 } }, title: { display: true, text: 'Step', font: { size: 9, weight: 'bold' } } },
+                    y: { ticks: { font: { size: 8 } }, title: { display: true, text: 'Temperature [°C]', font: { size: 9, weight: 'bold' } } }
+                }
+            }
+        });
+    }
+
+    function renderMathSchematic() {
+        if (typeof katex === 'undefined') return;
+
+        // Static Headers
+        katex.render("\\text{1. Flat Wall (Planar Geometry, 1D)}", document.getElementById('flatHeader'), {displayMode: false});
+        katex.render("\\text{2. Cylindrical Analogy (Radial Geometry, 1D)}", document.getElementById('cylHeader'), {displayMode: false});
+        katex.render("\\text{3. Calculated Cylindrical Values}", document.getElementById('calcHeader'), {displayMode: false});
+
+        // Headers for the separated T(x) derivation section
+        katex.render("\\text{1. Flat wall: temperature } T(x)", document.getElementById('txFlatHeader'), {displayMode: false});
+        katex.render("\\text{2. Cylindrical insulation: temperature } T(r)", document.getElementById('txCylHeader'), {displayMode: false});
+        katex.render("\\text{3. Calculated values for cylindrical geometry}", document.getElementById('txCalcHeader'), {displayMode: false});
+        // 1. Q = deltaT / R
+        katex.render("Q = \\frac{\\Delta T}{R_{tot,flat}}", document.getElementById('eqF_1'), {displayMode: false});
+        katex.render("Q = \\frac{\\Delta T}{R_{tot,cyl}}", document.getElementById('eqC_1'), {displayMode: false});
+
+        // 2. Q = (T - T) / (R+R+R)
+        katex.render("Q = \\frac{T_0 - T_{amb}}{R_{contact} + R_{cond} + R_{conv}}", document.getElementById('eqF_2'), {displayMode: false});
+        katex.render("Q = \\frac{T_{wire} - T_{amb}}{R_{contact} + R_{cond} + R_{conv}}", document.getElementById('eqC_2'), {displayMode: false});
+
+        // 3. R_contact
+        katex.render("Q = A h_c \\Delta T_{contact} \\implies R_{contact} = \\frac{1}{A h_c}", document.getElementById('eqF_3'), {displayMode: false});
+        katex.render("Q = 2\\pi r_{IN} L h_c \\Delta T_{contact} \\implies R_{contact} = \\frac{1}{2\\pi r_{IN} L h_c}", document.getElementById('eqC_3'), {displayMode: false});
+
+        // 4. R_cond (Corrected total wall thickness x_OUT)
+        katex.render("Q = -A \\lambda \\frac{dT}{dx} \\implies R_{cond} = \\frac{x_{OUT}}{A \\lambda}", document.getElementById('eqF_4'), {displayMode: false});
+        katex.render("Q = -2\\pi r L \\lambda \\frac{dT}{dr} \\implies R_{cond} = \\frac{\\ln(r_{OUT}/r_{IN})}{2\\pi L \\lambda}", document.getElementById('eqC_4'), {displayMode: false});
+
+        // 5. R_conv
+        katex.render("Q = A_{OUT} h \\Delta T_{conv} \\implies R_{conv} = \\frac{1}{A_{OUT} h}", document.getElementById('eqF_5'), {displayMode: false});
+        katex.render("Q = 2\\pi r_{OUT} L h \\Delta T_{conv} \\implies R_{conv} = \\frac{1}{2\\pi r_{OUT} L h}", document.getElementById('eqC_5'), {displayMode: false});
+
+        // 2b. Q Substituted with corrected R_cond (using x_OUT)
+        katex.render("Q = \\frac{T_0 - T_{amb}}{\\frac{1}{A h_c} + \\frac{x_{OUT}}{A \\lambda} + \\frac{1}{A_{OUT} h}}", document.getElementById('eqF_2b'), {displayMode: false});
+        katex.render("Q = \\frac{T_{wire} - T_{amb}}{\\frac{1}{2\\pi r_{IN} L h_c} + \\frac{\\ln(r_{OUT}/r_{IN})}{2\\pi L \\lambda} + \\frac{1}{2\\pi r_{OUT} L h}}", document.getElementById('eqC_2b'), {displayMode: false});
+
+        // 2c. Transformed equation for T0
+        katex.render("T_0 = T_{amb} + Q \\left( \\frac{1}{A h_c} + \\frac{x_{OUT}}{A \\lambda} + \\frac{1}{A_{OUT} h} \\right)", document.getElementById('eqF_2c'), {displayMode: false});
+        katex.render("T_{wire} = T_{amb} + Q \\left( \\frac{1}{2\\pi r_{IN} L h_c} + \\frac{\\ln(r_{OUT}/r_{IN})}{2\\pi L \\lambda} + \\frac{1}{2\\pi r_{OUT} L h} \\right)", document.getElementById('eqC_2c'), {displayMode: false});
+
+        // 6. Fourier's Law (Heat Flux)
+        katex.render("\\text{Fourier's Law (Heat Flux): } q = -\\lambda \\frac{dT}{dx}", document.getElementById('eqF_6'), {displayMode: false});
+        katex.render("", document.getElementById('eqC_6'), {displayMode: false});
+
+        // 7. Fourier's Law (Total Rate)
+        katex.render("\\text{Fourier's Law (Total Rate): } Q = -A \\lambda \\frac{dT}{dx}", document.getElementById('eqF_7'), {displayMode: false});
+        katex.render("\\text{Fourier's Law: } Q = -2\\pi r L \\lambda \\frac{dT}{dr}", document.getElementById('eqC_7'), {displayMode: false});
+
+        // 8. Separate Variables
+        katex.render("dT = -\\frac{Q}{A\\lambda} dx", document.getElementById('eqF_8'), {displayMode: false});
+        katex.render("dT = -\\frac{Q}{2\\pi L\\lambda} \\frac{dr}{r}", document.getElementById('eqC_8'), {displayMode: false});
+
+        // 9. Integration
+        katex.render("\\int_{T_{surf}}^{T(x)} dT = -\\frac{Q}{A\\lambda} \\int_{0}^{x} dx'", document.getElementById('eqF_9'), {displayMode: false});
+        katex.render("\\int_{T_{IN}}^{T(r)} dT = -\\frac{Q}{2\\pi L\\lambda} \\int_{r_{IN}}^{r} \\frac{dr'}{r'}", document.getElementById('eqC_9'), {displayMode: false});
+
+        // 10. Final Difference
+        katex.render("T_{surf} - T(x) = \\frac{Q}{A\\lambda} x", document.getElementById('eqF_10'), {displayMode: false});
+        katex.render("T_{IN} - T(r) = \\frac{Q}{2\\pi L\\lambda} \\ln\\left(\\frac{r}{r_{IN}}\\right)", document.getElementById('eqC_10'), {displayMode: false});
+
+        // 11. T(x) and T(r) on the left
+        katex.render("T(x) = T_{surf} - \\frac{Q}{A\\lambda} x", document.getElementById('eqF_11'), {displayMode: false});
+        katex.render("T(r) = T_{IN} - \\frac{Q}{2\\pi L\\lambda} \\ln\\left(\\frac{r}{r_{IN}}\\right)", document.getElementById('eqC_11'), {displayMode: false});
+
+        // 12. Main definition of surface contact conductance heat transfer
+        katex.render("Q = A h_c (T_0 - T_{surf})", document.getElementById('eqF_12'), {displayMode: false});
+        katex.render("Q = 2\\pi r_{IN} L h_c (T_{wire} - T_{IN})", document.getElementById('eqC_12'), {displayMode: false});
+
+        // 12b. Transformed equation with T0 / T_wire on the left
+        katex.render("T_0 = T_{surf} + \\frac{Q}{A h_c}", document.getElementById('eqF_12b'), {displayMode: false});
+        katex.render("T_{wire} = T_{IN} + \\frac{Q}{2\\pi r_{IN} L h_c}", document.getElementById('eqC_12b'), {displayMode: false});
+
+        // 12c. Universal flat-wall heat-flow formula; Joule heating retained for cylinder
+    
+        katex.render("\\begin{aligned} Q &= Q_{DC}=I_{peak}^{2}R_{DC} \\\\ Q &= Q_{AC}=I_{RMS}^{2}R_{AC}=\\left(\\frac{I_{peak}}{\\sqrt{2}}\\right)^{2}R_{AC}=\\frac{I_{peak}^{2}}{2}R_{AC}\\end{aligned}", document.getElementById('eqC_12c'), {displayMode: false});
+
+        // 13. Derivation of T_surf and T_IN
+        katex.render("T_{surf} = T_0 - \\frac{Q}{A h_c}", document.getElementById('eqF_13'), {displayMode: false});
+        katex.render("T_{IN} = T_{wire} - \\frac{Q}{2\\pi r_{IN} L h_c}", document.getElementById('eqC_13'), {displayMode: false});
+
+        // 13b. Direct substitution in the ordinary line immediately after T_surf / T_IN
+        katex.render("T(x) = \\left(T_0 - \\frac{Q}{A h_c}\\right) - \\frac{Q}{A\\lambda}x", document.getElementById('eqF_13b'), {displayMode: false});
+        katex.render("T(r) = \\left(T_{wire} - \\frac{Q}{2\\pi r_{IN}Lh_c}\\right) - \\frac{Q}{2\\pi L\\lambda}\\ln\\left(\\frac{r}{r_{IN}}\\right)", document.getElementById('eqC_13b'), {displayMode: false});
+        // 14. Substitution of T0 into T(x) with corrected x_OUT total thickness
+        katex.render("T(x) = T_{amb} + Q \\left( \\frac{1}{A h_c} + \\frac{x_{OUT}}{A \\lambda} + \\frac{1}{A_{OUT} h} \\right) - \\frac{Q}{A h_c} - \\frac{Q}{A\\lambda} x", document.getElementById('eqF_14'), {displayMode: false});
+        katex.render("T(r) = T_{amb} + Q \\left( \\frac{1}{2\\pi r_{IN} L h_c} + \\frac{\\ln(r_{OUT}/r_{IN})}{2\\pi L \\lambda} + \\frac{1}{2\\pi r_{OUT} L h} \\right) - \\frac{Q}{2\\pi r_{IN} L h_c} - \\frac{Q}{2\\pi L\\lambda} \\ln\\left(\\frac{r}{r_{IN}}\\right)", document.getElementById('eqC_14'), {displayMode: false});
+
+        // 15. Distribute Q
+        katex.render("T(x) = T_{amb} + \\frac{Q}{A h_c} + \\frac{Q x_{OUT}}{A \\lambda} + \\frac{Q}{A_{OUT} h} - \\frac{Q}{A h_c} - \\frac{Q}{A\\lambda} x", document.getElementById('eqF_15'), {displayMode: false});
+        katex.render("T(r) = T_{amb} + \\frac{Q}{2\\pi r_{IN} L h_c} + \\frac{Q \\ln(r_{OUT}/r_{IN})}{2\\pi L \\lambda} + \\frac{Q}{2\\pi r_{OUT} L h} - \\frac{Q}{2\\pi r_{IN} L h_c} - \\frac{Q}{2\\pi L\\lambda} \\ln\\left(\\frac{r}{r_{IN}}\\right)", document.getElementById('eqC_15'), {displayMode: false});
+
+        // 16. Simplify (Linear Temperature Profile for Flat Wall)
+        katex.render("T(x) = T_{amb} + \\frac{Q x_{OUT}}{A \\lambda} + \\frac{Q}{A_{OUT} h} - \\frac{Q x}{A \\lambda}", document.getElementById('eqF_16'), {displayMode: false});
+        katex.render("T(r) = T_{amb} + \\frac{Q \\ln(r_{OUT}/r_{IN})}{2\\pi L \\lambda} + \\frac{Q}{2\\pi r_{OUT} L h} - \\frac{Q}{2\\pi L\\lambda} \\ln\\left(\\frac{r}{r_{IN}}\\right)", document.getElementById('eqC_16'), {displayMode: false});
+
+        // 17. Compact thermal-resistance form
+        katex.render("T(x) = T_{amb} + Q R_{cond,flat} + Q R_{conv,flat} - Q R_x", document.getElementById('eqF_17'), {displayMode: false});
+        katex.render("T(r) = T_{amb} + Q R_{cond,cyl} + Q R_{conv,cyl} - Q R_r", document.getElementById('eqC_17'), {displayMode: false});
+        // 18. T_OUT directly from T(x_OUT) and T(r_OUT), without R abbreviations
+        katex.render("T_{OUT}=T(x_{OUT})=T_{amb}+\\frac{Qx_{OUT}}{A\\lambda}+\\frac{Q}{A_{OUT}h}-\\frac{Qx_{OUT}}{A\\lambda}=T_{amb}+\\frac{Q}{A_{OUT}h}", document.getElementById('eqF_18'), {displayMode: false});
+        katex.render("T_{OUT}=T(r_{OUT})=T_{amb}+\\frac{Q\\ln(r_{OUT}/r_{IN})}{2\\pi L\\lambda}+\\frac{Q}{2\\pi r_{OUT}Lh}-\\frac{Q}{2\\pi L\\lambda}\\ln\\left(\\frac{r_{OUT}}{r_{IN}}\\right)=T_{amb}+\\frac{Q}{2\\pi r_{OUT}Lh}", document.getElementById('eqC_18'), {displayMode: false});
+    }
+
+    function renderDynamicMath(p) {
+        if (typeof katex === 'undefined') return;
+
+        const { Q, rInt, rExt, hc, lambda, h, Tamb, Twire, Tint, Text, R_contact, R_cond, R_conv, R_tot, I_dc, R_elec_per_m, R_ac_per_m, Q_dc, Q_ac, isAC, frequency, skinFactor, temperatureFeedbackEnabled } = p;
+
+        // 1. Q = deltaT / R
+        katex.render("Q = \\frac{" + Twire.toFixed(1) + " - " + Tamb.toFixed(1) + "}{" + R_tot.toFixed(4) + "} = " + Q.toFixed(2) + " \\text{ W}", document.getElementById('eqV_1'), {displayMode: false});
+        
+        // 2. Q = (T - T) / (R+R+R)
+        katex.render("Q = \\frac{" + Twire.toFixed(1) + " - " + Tamb.toFixed(1) + "}{" + R_contact.toFixed(4) + " + " + R_cond.toFixed(4) + " + " + R_conv.toFixed(4) + "} = " + Q.toFixed(2) + " \\text{ W}", document.getElementById('eqV_2'), {displayMode: false});
+
+        // 3. R_contact
+        katex.render("R_{contact} = \\frac{1}{2\\pi (" + rInt + ")(1)(" + hc + ")} = " + R_contact.toFixed(4) + " \\text{ K/W}", document.getElementById('eqV_3'), {displayMode: false});
+        
+        // 4. R_cond
+        katex.render("R_{cond} = \\frac{\\ln(" + rExt + "/" + rInt + ")}{2\\pi(1)(" + lambda + ")} = " + R_cond.toFixed(4) + " \\text{ K/W}", document.getElementById('eqV_4'), {displayMode: false});
+        
+        // 5. R_conv
+        katex.render("R_{conv} = \\frac{1}{2\\pi (" + rExt + ")(1)(" + h + ")} = " + R_conv.toFixed(4) + " \\text{ K/W}", document.getElementById('eqV_5'), {displayMode: false});
+
+        // 2b. Substituted R components dynamically
+        katex.render("Q = \\frac{" + Twire.toFixed(1) + " - " + Tamb.toFixed(1) + "}{\\frac{1}{2\\pi (" + rInt + ")(1)(" + hc + ")} + \\frac{\\ln(" + rExt + "/" + rInt + ")}{2\\pi(1)(" + lambda + ")} + \\frac{1}{2\\pi (" + rExt + ")(1)(" + h + ")}} = " + Q.toFixed(2) + " \\text{ W}", document.getElementById('eqV_2b'), {displayMode: false});
+
+        // 2c. Transformed T_wire dynamically
+        katex.render("T_{wire} = " + Tamb.toFixed(1) + " + " + Q.toFixed(2) + " \\left( " + R_contact.toFixed(4) + " + " + R_cond.toFixed(4) + " + " + R_conv.toFixed(4) + " \\right) = " + Twire.toFixed(1), document.getElementById('eqV_2c'), {displayMode: false});
+
+        // 6. Heat Flux
+        document.getElementById('eqV_6').innerHTML = "";
+        
+        // 7. Q = ...
+        katex.render(Q.toFixed(2) + " = -2\\pi r (1)(" + lambda + ") \\frac{dT}{dr}", document.getElementById('eqV_7'), {displayMode: false});
+        
+        // 8. dT = ...
+        katex.render("dT = -\\frac{" + Q.toFixed(2) + "}{2\\pi(1)(" + lambda + ")} \\frac{dr}{r}", document.getElementById('eqV_8'), {displayMode: false});
+        
+        // 9. Integration
+        katex.render("\\int_{" + Tint.toFixed(1) + "}^{" + Text.toFixed(1) + "} dT = -\\frac{" + Q.toFixed(2) + "}{2\\pi(1)(" + lambda + ")} \\int_{" + rInt + "}^{" + rExt + "} \\frac{dr'}{r'}", document.getElementById('eqV_9'), {displayMode: false});
+        
+        // 10. Difference
+        katex.render(Tint.toFixed(1) + " - " + Text.toFixed(1) + " = \\frac{" + Q.toFixed(2) + "}{2\\pi(1)(" + lambda + ")} \\ln\\left(\\frac{" + rExt + "}{" + rInt + "}\\right) = " + (Tint - Text).toFixed(2), document.getElementById('eqV_10'), {displayMode: false});
+
+        // 11. T(x) and T(r) left-side formula
+        document.getElementById('eqV_11').innerHTML = "";
+        
+        // 12. Empty calc for main definition
+        document.getElementById('eqV_12').innerHTML = "";
+
+        // 12b. Calc for T_wire
+        katex.render("T_{wire} = " + Tint.toFixed(1) + " + \\frac{" + Q.toFixed(2) + "}{2\\pi(" + rInt + ")(1)(" + hc + ")} = " + Twire.toFixed(1), document.getElementById('eqV_12b'), {displayMode: false});
+
+        // 12c. Update resistance notation according to the temperature-feedback switch.
+        const rdcSymbol = temperatureFeedbackEnabled ? "R_{DC}(T_{wire})" : "R_{DC}";
+        const racSymbol = temperatureFeedbackEnabled ? "R_{AC}(T_{wire})" : "R_{AC}";
+        katex.render(
+            "\\begin{aligned} Q&=Q_{DC}=I_{peak}^{2}" + rdcSymbol +
+            " \\\\ Q&=Q_{AC}=I_{RMS}^{2}" + racSymbol +
+            "=\\left(\\frac{I_{peak}}{\\sqrt{2}}\\right)^{2}" + racSymbol +
+            "=\\frac{I_{peak}^{2}}{2}" + racSymbol + "\\end{aligned}",
+            document.getElementById('eqC_12c'), {displayMode: false});
+
+        // 12c. Calculated Joule heating for the cylindrical wire
+        katex.render(
+            "\\begin{aligned}" +
+            "Q_{DC}&=(" + I_dc.toFixed(1) + ")^2\\cdot " + R_elec_per_m.toExponential(3) + "=" + Q_dc.toFixed(2) + "\\,\\text{W} \\\\ " +
+            "Q_{AC}&=\\left(\\frac{" + I_dc.toFixed(1) + "}{\\sqrt{2}}\\right)^2\\cdot " + R_ac_per_m.toExponential(3) + "=" + Q_ac.toFixed(2) + "\\,\\text{W}" +
+            "\\end{aligned}", document.getElementById('eqV_12c'), {displayMode: false});
+
+        // 13. Calc for T_IN
+        katex.render("T_{IN} = " + Twire.toFixed(1) + " - \\frac{" + Q.toFixed(2) + "}{2\\pi(" + rInt + ")(1)(" + hc + ")} = " + Tint.toFixed(1), document.getElementById('eqV_13'), {displayMode: false});
+
+        // 13b. Numerical cylindrical equivalent of the direct substitution
+        katex.render("T(r) = \\left(" + Twire.toFixed(1) + " - \\frac{" + Q.toFixed(2) + "}{2\\pi(" + rInt + ")(1)(" + hc + ")}\\right) - \\frac{" + Q.toFixed(2) + "}{2\\pi(1)(" + lambda + ")}\\ln\\left(\\frac{r}{" + rInt + "}\\right)", document.getElementById('eqV_13b'), {displayMode: false});
+        // 14. Calc for substituted T(r) formula with T_wire substituted
+        katex.render("T(r) = " + Tamb.toFixed(1) + " + " + Q.toFixed(2) + " \\left( " + R_contact.toFixed(4) + " + " + R_cond.toFixed(4) + " + " + R_conv.toFixed(4) + " \\right) - \\frac{" + Q.toFixed(2) + "}{2\\pi(" + rInt + ")(1)(" + hc + ")} - \\frac{" + Q.toFixed(2) + "}{2\\pi(1)(" + lambda + ")} \\ln\\left(\\frac{r}{" + rInt + "}\\right)", document.getElementById('eqV_14'), {displayMode: false});
+
+        // 15. Calc for distributed Q
+        katex.render("T(r) = " + Tamb.toFixed(1) + " + " + (Q * R_contact).toFixed(2) + " + " + (Q * R_cond).toFixed(2) + " + " + (Q * R_conv).toFixed(2) + " - " + (Q * R_contact).toFixed(2) + " - \\frac{" + Q.toFixed(2) + "}{2\\pi(1)(" + lambda + ")} \\ln\\left(\\frac{r}{" + rInt + "}\\right)", document.getElementById('eqV_15'), {displayMode: false});
+
+        // 16. Calc for simplified terms
+        katex.render("T(r) = " + Tamb.toFixed(1) + " + " + (Q * R_cond).toFixed(2) + " + " + (Q * R_conv).toFixed(2) + " - \\frac{" + Q.toFixed(2) + "}{2\\pi(1)(" + lambda + ")} \\ln\\left(\\frac{r}{" + rInt + "}\\right)", document.getElementById('eqV_16'), {displayMode: false});
+
+        // 17. Cylindrical result in compact resistance notation
+        katex.render("T(r) = " + Tamb.toFixed(1) + " + " + Q.toFixed(2) + "(" + R_cond.toFixed(4) + ") + " + Q.toFixed(2) + "(" + R_conv.toFixed(4) + ") - " + Q.toFixed(2) + " R_r", document.getElementById('eqV_17'), {displayMode: false});
+        // 18. Numerical T_OUT from T(r_OUT), with all terms written explicitly
+        katex.render(
+            "T_{OUT}=T(r_{OUT})=" + Tamb.toFixed(1) +
+            "+\\frac{" + Q.toFixed(2) + "\\ln(" + rExt + "/" + rInt + ")}{2\\pi(1)(" + lambda + ")}" +
+            "+\\frac{" + Q.toFixed(2) + "}{2\\pi(" + rExt + ")(1)(" + h + ")}" +
+            "-\\frac{" + Q.toFixed(2) + "}{2\\pi(1)(" + lambda + ")}\\ln\\left(\\frac{" + rExt + "}{" + rInt + "}\\right)=" +
+            Text.toFixed(2) + "^{\\circ}\\mathrm{C}",
+            document.getElementById('eqV_18'),
+            {displayMode: false}
+        );
+    }
+
+    function drawArrow(ctx, fromx, fromy, tox, toy, color) {
+        const headlen = 5;
+        const dx = tox - fromx;
+        const dy = toy - fromy;
+        const angle = Math.atan2(dy, dx);
+        
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.moveTo(fromx, fromy);
+        ctx.lineTo(tox, toy);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(tox, toy);
+        ctx.lineTo(tox - headlen * Math.cos(angle - Math.PI / 6), toy - headlen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(tox - headlen * Math.cos(angle + Math.PI / 6), toy - headlen * Math.sin(angle + Math.PI / 6));
+        ctx.lineTo(tox, toy);
+        ctx.fill();
+    }
+
+    function drawCrossSection(rInt_mm, rExt_mm, Q_net, T_wire, T_IN, T_OUT) {
+        csCtx.clearRect(0, 0, csCanvas.width, csCanvas.height);
+        const cX = csCanvas.width / 2;
+        const cY = csCanvas.height / 2;
+
+        const maxR = Math.max(rExt_mm * 1.3, 12);
+        const scale = (Math.min(csCanvas.width, csCanvas.height) / 2 - 15) / maxR;
+
+        const rInt_px = rInt_mm * scale;
+        const rExt_px = rExt_mm * scale;
+
+        // Insulation Layer
+        csCtx.beginPath();
+        csCtx.arc(cX, cY, rExt_px, 0, 2 * Math.PI);
+        csCtx.fillStyle = 'rgba(41, 128, 185, 0.35)';
+        csCtx.fill();
+        csCtx.strokeStyle = '#0072B2';
+        csCtx.stroke();
+
+        // Copper Core
+        csCtx.beginPath();
+        csCtx.arc(cX, cY, rInt_px, 0, 2 * Math.PI);
+        csCtx.fillStyle = '#D55E00';
+        csCtx.fill();
+        csCtx.strokeStyle = '#a04000';
+        csCtx.stroke();
+
+        const arrowColor = Q_net >= 0 ? '#D55E00' : '#0072B2';
+        const numArrows = 6;
+        const arrowLen = 12;
+
+        for (let i = 0; i < numArrows; i++) {
+            const angle = (i * 2 * Math.PI) / numArrows;
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+
+            if (Math.abs(Q_net) > 0.1) {
+                if (Q_net > 0) {
+                    drawArrow(csCtx, cX + rInt_px * cos, cY + rInt_px * sin, cX + (rInt_px + arrowLen) * cos, cY + (rInt_px + arrowLen) * sin, arrowColor);
+                    drawArrow(csCtx, cX + rExt_px * cos, cY + rExt_px * sin, cX + (rExt_px + arrowLen) * cos, cY + (rExt_px + arrowLen) * sin, arrowColor);
+                } else {
+                    drawArrow(csCtx, cX + (rInt_px + arrowLen) * cos, cY + (rInt_px + arrowLen) * sin, cX + rInt_px * cos, cY + rInt_px * sin, arrowColor);
+                    drawArrow(csCtx, cX + (rExt_px + arrowLen) * cos, cY + (rExt_px + arrowLen) * sin, cX + rExt_px * cos, cY + rExt_px * sin, arrowColor);
+                }
+            }
+        }
+
+
+        // Dynamic temperature labels
+        csCtx.font = 'bold 11px sans-serif';
+        csCtx.textAlign = 'left';
+        csCtx.textBaseline = 'top';
+
+        csCtx.fillStyle = '#D55E00';
+        csCtx.fillText('T_wire = ' + T_wire.toFixed(1) + ' °C', 8, 8);
+
+        csCtx.fillStyle = '#009E73';
+        csCtx.fillText('T_IN = ' + T_IN.toFixed(1) + ' °C', 8, 24);
+
+        csCtx.fillStyle = '#0072B2';
+        csCtx.fillText('T_OUT = ' + T_OUT.toFixed(1) + ' °C', 8, 40);
+
+        // Joule-heating result in the upper-right corner of the cross-section.
+        csCtx.textAlign = 'right';
+        csCtx.textBaseline = 'top';
+        csCtx.fillStyle = '#7A3E9D';
+        csCtx.fillText('Q = ' + Q_net.toFixed(2) + ' W', csCanvas.width - 8, 8);
+    }
+
+    function updatePhysics() {
+        const I_dc = parseFloat(inputs.iDcInput.value);
+        const isAC = document.getElementById('modeSwitch').checked;
+        const frequency = parseFloat(inputs.frequencyInput.value);
+        const rInt = parseFloat(inputs.rInt.value) / 1000;
+        let rExt = parseFloat(inputs.rExt.value) / 1000;
+        const hc = parseFloat(inputs.hcCoeff.value);
+        const lambda = parseFloat(inputs.lambda.value);
+        const h = parseFloat(inputs.hCoeff.value);
+        const Tamb = parseFloat(inputs.tAmb.value);
+
+        if (rExt <= rInt) {
+            rExt = rInt + 0.0005;
+            inputs.rExt.value = (rExt * 1000).toFixed(1);
+        }
+
+        const temperatureFeedbackEnabled = document.getElementById('temperatureFeedbackSwitch').checked;
+        const requestedIterations = Math.max(1, Math.min(500, Math.round(parseFloat(inputs.iterationInput.value) || 1)));
+        inputs.iterationInput.value = requestedIterations;
+        const T_ref = 20.0;
+        const rho_cu_ref = 1.724e-8;
+        const alpha_cu = 0.00393;
+        const A_cross = Math.PI * rInt * rInt;
+        const I_rms = I_dc / Math.sqrt(2);
+        const R_contact = 1 / (2 * Math.PI * rInt * hc);
+        const R_cond = Math.log(rExt / rInt) / (2 * Math.PI * lambda);
+        const R_conv = 1 / (2 * Math.PI * rExt * h);
+        const R_tot = R_contact + R_cond + R_conv;
+        const relaxation = 0.5;
+        const iterationCount = temperatureFeedbackEnabled ? requestedIterations : 1;
+        let T_wire = Tamb;
+        let rho_cu = rho_cu_ref;
+        let R_elec_per_m = rho_cu_ref / A_cross;
+        let R_ac_per_m = R_elec_per_m;
+        let skinFactor = 0;
+        let Q_dc = 0;
+        let Q_ac = 0;
+        let Q_gen = 0;
+        for (let iteration = 0; iteration < iterationCount; iteration++) {
+            rho_cu = temperatureFeedbackEnabled ? rho_cu_ref * (1 + alpha_cu * (T_wire - T_ref)) : rho_cu_ref;
+            rho_cu = Math.max(rho_cu, 0.01 * rho_cu_ref);
+            R_elec_per_m = rho_cu / A_cross;
+            const xSquared = 8 * Math.PI * frequency * 1e-7 / R_elec_per_m;
+            const xFourth = xSquared * xSquared;
+            skinFactor = xFourth / (192 + 0.8 * xFourth);
+            R_ac_per_m = R_elec_per_m * (1 + skinFactor);
+            Q_dc = I_dc * I_dc * R_elec_per_m;
+            Q_ac = I_rms * I_rms * R_ac_per_m;
+            Q_gen = isAC ? Q_ac : Q_dc;
+            const calculatedWireTemperature = Tamb + Q_gen * R_tot;
+            T_wire = temperatureFeedbackEnabled ? relaxation * calculatedWireTemperature + (1 - relaxation) * T_wire : calculatedWireTemperature;
+        }
+        rho_cu = temperatureFeedbackEnabled ? rho_cu_ref * (1 + alpha_cu * (T_wire - T_ref)) : rho_cu_ref;
+        rho_cu = Math.max(rho_cu, 0.01 * rho_cu_ref);
+        R_elec_per_m = rho_cu / A_cross;
+        const finalXSquared = 8 * Math.PI * frequency * 1e-7 / R_elec_per_m;
+        const finalXFourth = finalXSquared * finalXSquared;
+        skinFactor = finalXFourth / (192 + 0.8 * finalXFourth);
+        R_ac_per_m = R_elec_per_m * (1 + skinFactor);
+        Q_dc = I_dc * I_dc * R_elec_per_m;
+        Q_ac = I_rms * I_rms * R_ac_per_m;
+        Q_gen = isAC ? Q_ac : Q_dc;
+        const Q_net = Q_gen;
+        const T_OUT = Tamb + Q_net * R_conv;
+        const T_IN = Tamb + Q_net * (R_conv + R_cond);
+        T_wire = Tamb + Q_net * R_tot;
+        displays.iDcVal.textContent = I_dc.toFixed(1);
+        displays.frequencyVal.textContent = frequency.toFixed(1);
+        displays.iterationVal.textContent = requestedIterations.toString();
+        const feedbackState = document.getElementById('temperatureFeedbackState');
+        feedbackState.textContent = temperatureFeedbackEnabled ? 'ON' : 'OFF';
+        feedbackState.classList.toggle('active', temperatureFeedbackEnabled);
+        document.getElementById('frequencyControl').style.display = isAC ? '' : 'none';
+        document.getElementById('dcModeLabel').classList.toggle('active', !isAC);
+        document.getElementById('acModeLabel').classList.toggle('active', isAC);
+        displays.rIntVal.textContent = (rInt * 1000).toFixed(1);
+        displays.rExtVal.textContent = (rExt * 1000).toFixed(1);
+        displays.hcCoeffVal.textContent = hc.toFixed(0);
+        displays.lambdaVal.textContent = lambda.toFixed(2);
+        displays.hCoeffVal.textContent = h.toFixed(1);
+        displays.tAmbVal.textContent = Tamb.toFixed(1);
+
+        renderDynamicMath({
+            Q: Q_net,
+            rInt: rInt,
+            rExt: rExt,
+            hc: hc,
+            lambda: lambda,
+            h: h,
+            Tamb: Tamb,
+            Twire: T_wire,
+            Tint: T_IN,
+            Text: T_OUT,
+            R_contact: R_contact,
+            R_cond: R_cond,
+            R_conv: R_conv,
+            R_tot: R_tot,
+            I_dc: I_dc,
+            R_elec_per_m: R_elec_per_m,
+            R_ac_per_m: R_ac_per_m,
+            Q_dc: Q_dc,
+            Q_ac: Q_ac,
+            isAC: isAC,
+            frequency: frequency,
+            skinFactor: skinFactor,
+            temperatureFeedbackEnabled: temperatureFeedbackEnabled
+        });
+
+        const maxR_plot = Math.max(rExt * 1000 * 2, 18);
+        const rInt_mm_val = rInt * 1000;
+        const rExt_mm_val = rExt * 1000;
+        const tempData = [
+            { x: 0, y: T_wire },
+            { x: rInt_mm_val, y: T_wire }
+        ];
+
+        // Exact logarithmic solution within the cylindrical insulation.
+        // The physical conduction solution ends at the outer insulation radius.
+        const insulationPoints = 160;
+        for (let i = 0; i <= insulationPoints; i++) {
+            const r_m = rInt + (rExt - rInt) * i / insulationPoints;
+            tempData.push({
+                x: r_m * 1000,
+                y: T_IN - (Q_net / (2 * Math.PI * lambda)) * Math.log(r_m / rInt)
+            });
+        }
+
+        // A separate dataset creates a true vertical temperature jump at the contact.
+        const contactJumpData = [
+            { x: rInt_mm_val, y: T_wire },
+            { x: rInt_mm_val, y: T_IN }
+        ];
+
+        // The convection model determines the surface temperature, not the fluid field.
+        // Ambient temperature is therefore shown only as a reference line.
+        const ambientData = [
+            { x: rExt_mm_val, y: Tamb },
+            { x: maxR_plot, y: Tamb }
+        ];
+
+        if (profileChart) {
+            profileChart.data.datasets[0].data = tempData;
+            profileChart.data.datasets[0].borderColor = '#D32F2F';
+            profileChart.data.datasets[0].backgroundColor = 'rgba(211, 47, 47, 0.12)';
+            profileChart.data.datasets[1].data = contactJumpData;
+            profileChart.data.datasets[1].borderColor = '#D55E00';
+            profileChart.data.datasets[1].backgroundColor = '#D55E00';
+            profileChart.data.datasets[2].data = ambientData;
+            profileChart.options.scales.x.min = 0;
+            profileChart.options.scales.x.max = maxR_plot;
+            profileChart.options.plugins.profileAnnotations = {
+                rInt: rInt_mm_val,
+                rExt: rExt_mm_val,
+                tWire: T_wire,
+                tInt: T_IN,
+                tExt: T_OUT
+            };
+            profileChart.update();
+        }
+        stepCount++;
+        if (historyStore.labels.length >= maxHistoryPoints) {
+            historyStore.labels.shift();
+
+            historyStore.tExtHistory.shift();
+            historyStore.tWireHistory.shift();
+            historyStore.tIntHistory.shift();
+        }
+
+        historyStore.labels.push("#" + stepCount);
+
+        historyStore.tExtHistory.push(T_OUT);
+        historyStore.tWireHistory.push(T_wire);
+        historyStore.tIntHistory.push(T_IN);
+
+        if (tempHistoryChart) {
+            tempHistoryChart.data.labels = historyStore.labels;
+            // Dataset order must match the legend: T_wire, T_IN, T_OUT.
+            tempHistoryChart.data.datasets[0].data = historyStore.tWireHistory;
+            tempHistoryChart.data.datasets[1].data = historyStore.tIntHistory;
+            tempHistoryChart.data.datasets[2].data = historyStore.tExtHistory;
+            tempHistoryChart.update();
+        }
+
+        drawCrossSection(rInt * 1000, rExt * 1000, Q_net, T_wire, T_IN, T_OUT);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        initCharts();
+        renderMathSchematic();
+        Object.values(inputs).forEach(input => input.addEventListener('input', updatePhysics));
+        document.getElementById('modeSwitch').addEventListener('change', () => { resetHistory(); updatePhysics(); });
+        document.getElementById('temperatureFeedbackSwitch').addEventListener('change', () => { resetHistory(); updatePhysics(); });
+        updatePhysics();
+    });
+</script>
+
+</body>
+</html>
